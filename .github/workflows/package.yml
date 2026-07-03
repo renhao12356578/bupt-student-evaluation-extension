@@ -18,19 +18,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build zip
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install crx3
+        run: npm ci || npm install
+
+      - name: Build zip & crx
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
         run: bash scripts/package.sh
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bupt-student-evaluation-extension
-          path: dist/bupt-student-evaluation-extension.zip
+          path: |
+            dist/bupt-student-evaluation-extension.zip
+            dist/bupt-student-evaluation-extension.crx
           retention-days: 90
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/bupt-student-evaluation-extension.zip
+          files: |
+            dist/bupt-student-evaluation-extension.zip
+            dist/bupt-student-evaluation-extension.crx
           generate_release_notes: true

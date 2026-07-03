@@ -1,5 +1,7 @@
 .DS_Store
 *.log
+dist/
 node_modules/
 .idea/
 .vscode/
+# 本地私钥与构建产物见 dist/；CI 使用 Secret CRX_PRIVATE_KEY

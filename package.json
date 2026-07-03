@@ -1,0 +1,11 @@
+{
+  "name": "bupt-student-evaluation-extension",
+  "private": true,
+  "description": "Build tools for BUPT 一键评教 Chrome extension",
+  "scripts": {
+    "package": "bash scripts/package.sh"
+  },
+  "devDependencies": {
+    "crx3": "^1.1.3"
+  }
+}

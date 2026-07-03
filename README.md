@@ -36,23 +36,32 @@ bupt-student-evaluation-extension.zip
 └── icons/
 ```
 
-### 一键打包
+### 一键打包（ZIP + CRX）
 
 ```bash
-chmod +x scripts/package.sh
+npm install          # 首次：安装 crx3
 ./scripts/package.sh
-# 输出: dist/bupt-student-evaluation-extension.zip
 ```
+
+产物：
+
+| 文件 | 说明 |
+|------|------|
+| `dist/bupt-student-evaluation-extension.zip` | 解压或开发者模式加载 |
+| `dist/bupt-student-evaluation-extension.crx` | 拖入 `chrome://extensions/` 安装 |
+| `dist/extension.pem` | CRX 签名私钥（首次自动生成，**请备份**以保持扩展 ID 不变） |
+
+**CI 固定扩展 ID**：在 GitHub 仓库 Settings → Secrets → `CRX_PRIVATE_KEY` 填入 `dist/extension.pem` 的完整内容。
 
 ### GitHub Actions 自动打包
 
 - 推送到 `main` 或开 PR 时自动运行 [Package Extension](https://github.com/renhao12356578/bupt-student-evaluation-extension/actions)
-- 在 Actions 页面下载 **bupt-student-evaluation-extension** artifact 即可
-- 打 tag（如 `v1.1.1`）推送后会自动创建 Release 并附上 zip：
+- Artifacts 含 **zip + crx**
+- 打 tag（如 `v1.1.2`）推送后 Release 附 zip 与 crx：
 
 ```bash
-git tag v1.1.1
-git push origin v1.1.1
+git tag v1.1.2
+git push origin v1.1.2
 ```
 
 ### 三种使用形态
