@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "BUPT 一键评教",
+  "version": "1.0.0",
+  "description": "北京邮电大学教务系统学生期末评教自动化：一键填充、保存与提交",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "BUPT 一键评教",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["https://jwgl.bupt.edu.cn/*"],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://jwgl.bupt.edu.cn/jsxsd/xspj/*"],
+      "js": ["lib/fill.js", "lib/list.js", "content/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

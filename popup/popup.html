@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BUPT 一键评教</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>一键评教</h1>
+      <p class="sub">jwgl.bupt.edu.cn · 期末学生评教</p>
+    </header>
+
+    <section class="status" id="status">
+      <p id="statusText">请先登录教务系统并打开评教页面</p>
+      <div class="progress hidden" id="progressWrap">
+        <div class="bar"><div class="fill" id="progressBar"></div></div>
+        <span id="progressLabel">0 / 0</span>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button type="button" class="primary" id="btnStart">一键评教（保存）</button>
+      <button type="button" class="primary outline" id="btnStartSubmit">一键评教并提交</button>
+      <button type="button" class="secondary hidden" id="btnSubmit">提交全部</button>
+      <button type="button" class="ghost hidden" id="btnStop">停止</button>
+    </section>
+
+    <details class="settings">
+      <summary>高级设置</summary>
+      <label>
+        最少降级指标
+        <input type="number" id="minDowngrade" min="1" max="3" value="1" />
+        <span class="hint">≥1，避免「请不要选相同一项」</span>
+      </label>
+      <label>
+        最多降级指标
+        <input type="number" id="maxDowngrade" min="1" max="4" value="2" />
+        <span class="hint">1 项约 98 分，2 项约 97 分</span>
+      </label>
+      <label>
+        亮点
+        <input type="text" id="highlights" value="很好" />
+      </label>
+      <label>
+        改进建议
+        <input type="text" id="improvement" placeholder="留空" />
+      </label>
+    </details>
+
+    <footer>
+      <p>保存 ≠ 提交。提交后不可修改。</p>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
