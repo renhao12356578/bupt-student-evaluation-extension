@@ -18,8 +18,41 @@
 2. 打开 Chrome → `chrome://extensions/`
 3. 开启右上角 **开发者模式**
 4. 点击 **加载已解压的扩展程序**，选择本项目根目录
-5. 登录教务系统，打开 [评教入口](https://jwgl.bupt.edu.cn/jsxsd/xspj/xspj_find.do)
-6. 点击扩展图标 → **一键评教**
+5. **任意页面**点击扩展图标 → **一键评教**（会自动打开评教页；未登录时需先在浏览器登录教务）
+
+> 无需手动打开评教 URL，扩展会自动跳转到 `xspj_find.do` 并开始流程。
+
+## 打包分发
+
+扩展**不需要编译**，打包就是一个 **zip 压缩包**，且 **`manifest.json` 必须在 zip 根目录**：
+
+```
+bupt-student-evaluation-extension.zip
+├── manifest.json          ← 必须在最外层
+├── popup/
+├── content/
+├── lib/
+├── background/
+└── icons/
+```
+
+### 一键打包
+
+```bash
+chmod +x scripts/package.sh
+./scripts/package.sh
+# 输出: dist/bupt-student-evaluation-extension.zip
+```
+
+### 三种使用形态
+
+| 形态 | 文件 | 用途 |
+|------|------|------|
+| **文件夹** | 项目根目录 | 开发调试，`chrome://extensions` → 加载已解压 |
+| **`.zip`** | `dist/*.zip` | 发同学、备份、上传 Chrome 网上应用店 |
+| **`.crx`** | Chrome 打包生成 | 旧式离线安装（现在较少用，商店/zip 更常见） |
+
+上架 [Chrome Web Store](https://chrome.google.com/webstore/devconsole) 时：上传 zip，填写说明，审核通过后用户可直接安装，**无需开发者模式**。
 
 ## 使用说明
 

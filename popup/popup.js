@@ -1,5 +1,8 @@
 const $ = (id) => document.getElementById(id);
 
+const FIND_URL = 'https://jwgl.bupt.edu.cn/jsxsd/xspj/xspj_find.do';
+const EVAL_PATH = '/jsxsd/xspj/';
+
 const els = {
   status: $('status'),
   statusText: $('statusText'),
@@ -52,20 +55,66 @@ async function getActiveTab() {
   return tab;
 }
 
-async function sendToContent(type, extra = {}) {
-  const tab = await getActiveTab();
-  if (!tab?.id) throw new Error('无法获取当前标签页');
-  return chrome.tabs.sendMessage(tab.id, { type, ...extra });
+function isEvalPage(url = '') {
+  return url.includes('jwgl.bupt.edu.cn') && url.includes(EVAL_PATH);
+}
+
+async function sendToTab(tabId, type, extra = {}) {
+  return chrome.tabs.sendMessage(tabId, { type, ...extra });
+}
+
+async function waitTabComplete(tabId, timeoutMs = 20000) {
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.status === 'complete') return;
+
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(new Error('页面加载超时，请确认已登录教务系统'));
+    }, timeoutMs);
+
+    function onUpdated(id, info) {
+      if (id === tabId && info.status === 'complete') {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+/** 确保当前标签页在评教页；不在则自动跳转 */
+async function ensureEvalPage(tab) {
+  if (isEvalPage(tab.url)) return tab;
+
+  await chrome.storage.session.set({
+    pending_start: {
+      autoSubmit: false,
+      _placeholder: true,
+    },
+  });
+
+  const target = tab.url?.includes('jwgl.bupt.edu.cn') ? tab.id : tab.id;
+  await chrome.tabs.update(target, { url: FIND_URL });
+  await waitTabComplete(target);
+  await sleep(600);
+  return chrome.tabs.get(target);
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function refreshStatus() {
   try {
     const tab = await getActiveTab();
-    if (!tab?.url?.includes('jwgl.bupt.edu.cn')) {
-      setUiState('', '请先登录教务系统，并打开评教相关页面');
+    if (!isEvalPage(tab.url)) {
+      setUiState('', '任意页面均可：点击「一键评教」将自动打开评教页');
+      els.btnSubmit.classList.add('hidden');
       return;
     }
-    const res = await sendToContent('GET_STATUS');
+    const res = await sendToTab(tab.id, 'GET_STATUS');
     if (res.pageType === 'list' && res.status) {
       const s = res.status;
       setUiState(
@@ -77,28 +126,50 @@ async function refreshStatus() {
       );
       els.btnSubmit.classList.toggle('hidden', s.unevaluated > 0);
     } else if (res.pageType === 'find') {
-      setUiState('', '在评教入口页，点击「一键评教」开始');
+      setUiState('', '已就绪，点击「一键评教」开始');
     } else if (res.pageType === 'edit') {
       setUiState('running', '正在评价页…');
-    } else {
-      setUiState('', '请打开评教页面（xspj_find / xspj_list）');
     }
   } catch {
-    setUiState('', '请刷新评教页面后重试（扩展需注入 content script）');
+    setUiState('', '点击「一键评教」将自动打开评教页面');
   }
 }
 
 async function startEval(autoSubmit) {
   setRunning(true);
-  setUiState('running', autoSubmit ? '正在一键评教并提交…' : '正在一键评教…');
+  setUiState('running', autoSubmit ? '正在打开评教页并提交…' : '正在打开评教页…');
+
   try {
     const config = getConfig();
     if (config.minDowngrade > config.maxDowngrade) {
       throw new Error('最少降级不能大于最多降级');
     }
     await chrome.storage.local.set({ eval_config: config });
-    await sendToContent('START_EVAL', { autoSubmit, config });
+
+    let tab = await getActiveTab();
+    if (!tab?.id) throw new Error('无法获取当前标签页');
+
+    // 写入待启动任务（跳转后 content script 会自动接管）
+    await chrome.storage.session.set({ pending_start: { autoSubmit, config } });
+
+    if (!isEvalPage(tab.url)) {
+      await chrome.tabs.update(tab.id, { url: FIND_URL });
+      await waitTabComplete(tab.id);
+      await sleep(800);
+      tab = await chrome.tabs.get(tab.id);
+    }
+
+    // 已在评教页则直接启动
+    try {
+      await sendToTab(tab.id, 'START_EVAL', { autoSubmit, config });
+      // 清除 pending，避免重复启动
+      await chrome.storage.session.remove('pending_start');
+    } catch {
+      // 跳转刚完成时 content script 可能尚未就绪，pending_start 会由 onPageReady 处理
+      setUiState('running', '已跳转，正在自动评教…');
+    }
   } catch (e) {
+    await chrome.storage.session.remove('pending_start');
     setUiState('error', e.message || '启动失败');
     setRunning(false);
   }
@@ -106,7 +177,7 @@ async function startEval(autoSubmit) {
 
 els.btnStart.addEventListener('click', () => startEval(false));
 els.btnStartSubmit.addEventListener('click', () => {
-  if (confirm('将自动保存并提交全部评教，提交后不可修改。确定？')) {
+  if (confirm('将自动打开评教页、保存并提交全部评教。提交后不可修改。确定？')) {
     startEval(true);
   }
 });
@@ -114,7 +185,14 @@ els.btnStartSubmit.addEventListener('click', () => {
 els.btnSubmit.addEventListener('click', async () => {
   if (!confirm('确定提交全部已保存的评教？提交后不可修改。')) return;
   try {
-    await sendToContent('SUBMIT_ALL');
+    const tab = await getActiveTab();
+    if (!isEvalPage(tab.url)) {
+      await chrome.tabs.update(tab.id, { url: FIND_URL });
+      await waitTabComplete(tab.id);
+      setUiState('error', '请先完成评教保存，再在列表页提交');
+      return;
+    }
+    await sendToTab(tab.id, 'SUBMIT_ALL');
     setUiState('done', '已点击提交，请在页面确认结果');
   } catch (e) {
     setUiState('error', e.message || '提交失败');
@@ -122,7 +200,13 @@ els.btnSubmit.addEventListener('click', async () => {
 });
 
 els.btnStop.addEventListener('click', async () => {
-  await sendToContent('STOP_EVAL');
+  try {
+    const tab = await getActiveTab();
+    if (tab?.id && isEvalPage(tab.url)) await sendToTab(tab.id, 'STOP_EVAL');
+  } catch {
+    /* ignore */
+  }
+  await chrome.storage.session.remove('pending_start');
   setRunning(false);
   setUiState('', '已停止');
 });

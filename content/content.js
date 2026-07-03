@@ -118,11 +118,29 @@
     await notifyPopup({ phase: 'error', message: '请在教务评教页面使用' });
   }
 
-  // 页面加载后自动续跑
+  async function consumePendingStart() {
+    const data = await chrome.storage.session.get('pending_start');
+    if (!data.pending_start) return false;
+    await chrome.storage.session.remove('pending_start');
+    await setRunState({
+      active: true,
+      autoSubmit: !!data.pending_start.autoSubmit,
+      config: data.pending_start.config || window.BuptEvalFill.DEFAULT_CONFIG,
+      startedAt: Date.now(),
+    });
+    return true;
+  }
+
+  async function onPageReady() {
+    await consumePendingStart();
+    await runPipeline();
+  }
+
+  // 页面加载后：处理「点击扩展后跳转过来」的待启动任务，或续跑进行中的评教
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => runPipeline());
+    document.addEventListener('DOMContentLoaded', () => onPageReady());
   } else {
-    runPipeline();
+    onPageReady();
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
