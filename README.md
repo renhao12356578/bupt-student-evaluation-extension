@@ -44,6 +44,17 @@ chmod +x scripts/package.sh
 # 输出: dist/bupt-student-evaluation-extension.zip
 ```
 
+### GitHub Actions 自动打包
+
+- 推送到 `main` 或开 PR 时自动运行 [Package Extension](https://github.com/renhao12356578/bupt-student-evaluation-extension/actions)
+- 在 Actions 页面下载 **bupt-student-evaluation-extension** artifact 即可
+- 打 tag（如 `v1.1.1`）推送后会自动创建 Release 并附上 zip：
+
+```bash
+git tag v1.1.1
+git push origin v1.1.1
+```
+
 ### 三种使用形态
 
 | 形态 | 文件 | 用途 |
