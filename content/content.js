@@ -128,6 +128,16 @@
       if (!result.ok) {
         await setRunState(null);
         await notifyProgress({ phase: 'error', message: result.error || '填充失败' });
+        return;
+      }
+
+      // 保存后等跳回列表（Playwright: waitForURL xspj_list.do）
+      for (let i = 0; i < 80; i++) {
+        if (location.href.includes('xspj_list.do')) break;
+        await sleep(250);
+      }
+      if (location.href.includes('xspj_list.do')) {
+        await runPipeline();
       }
       return;
     }

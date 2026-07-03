@@ -35,6 +35,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         target: { tabId },
         world: 'MAIN',
         func: () => {
+          if (typeof window.__buptEvalInstallDialogHook === 'function') {
+            window.__buptEvalInstallDialogHook();
+          }
           if (typeof window.__buptEvalInvokeSave === 'function') {
             return window.__buptEvalInvokeSave();
           }
@@ -42,9 +45,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (!btn) return { ok: false, error: '未找到保存按钮' };
           if (typeof saveData === 'function') {
             saveData(btn, '0');
-            return { ok: true };
+          } else {
+            btn.click();
           }
-          btn.click();
+          if (typeof window.__buptEvalStartDomModalWatcher === 'function') {
+            window.__buptEvalStartDomModalWatcher(10000);
+          }
           return { ok: true };
         },
       })
