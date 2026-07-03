@@ -1,9 +1,10 @@
 /**
  * BUPT 评教 content script — 与 Playwright 成功流程对齐
- * find → list → edit(填表+saveData) → list → … → 可选 submit
  */
 (function () {
-  const STORAGE_KEY = 'bupt_eval_run';
+  if (window.top !== window.self) return;
+
+  const RUN_KEY = 'bupt_eval_run';
   const PENDING_KEY = 'pending_start';
   const FIND_URL = 'https://jwgl.bupt.edu.cn/jsxsd/xspj/xspj_find.do';
 
@@ -20,29 +21,27 @@
   }
 
   async function getRunState() {
-    const data = await chrome.storage.session.get(STORAGE_KEY);
-    return data[STORAGE_KEY] || null;
+    const data = await window.BuptEvalStore.get(RUN_KEY);
+    return data[RUN_KEY] || null;
   }
 
   async function setRunState(state) {
-    if (state) await chrome.storage.session.set({ [STORAGE_KEY]: state });
-    else await chrome.storage.session.remove(STORAGE_KEY);
+    if (state) await window.BuptEvalStore.set({ [RUN_KEY]: state });
+    else await window.BuptEvalStore.remove(RUN_KEY);
   }
 
   async function notifyProgress(payload) {
-    const msg = { ...payload, ts: Date.now() };
-    await chrome.storage.session.set({ eval_progress: msg });
     try {
-      await chrome.runtime.sendMessage({ type: 'EVAL_PROGRESS', ...msg });
+      await chrome.runtime.sendMessage({ type: 'EVAL_PROGRESS', ...payload, ts: Date.now() });
     } catch {
       /* popup 可能已关 */
     }
   }
 
   async function activateFromPending() {
-    const data = await chrome.storage.session.get(PENDING_KEY);
+    const data = await window.BuptEvalStore.get(PENDING_KEY);
     if (!data[PENDING_KEY]) return false;
-    await chrome.storage.session.remove(PENDING_KEY);
+    await window.BuptEvalStore.remove(PENDING_KEY);
     await setRunState({
       active: true,
       autoSubmit: !!data[PENDING_KEY].autoSubmit,
@@ -53,7 +52,7 @@
   }
 
   async function activateFromMessage(msg) {
-    await chrome.storage.session.remove(PENDING_KEY);
+    await window.BuptEvalStore.remove(PENDING_KEY);
     await setRunState({
       active: true,
       autoSubmit: !!msg.autoSubmit,
@@ -62,7 +61,6 @@
     });
   }
 
-  /** 与 Playwright runPipeline 一致 */
   async function runPipeline() {
     const state = await getRunState();
     if (!state?.active) return;
@@ -130,9 +128,7 @@
       if (!result.ok) {
         await setRunState(null);
         await notifyProgress({ phase: 'error', message: result.error || '填充失败' });
-        return;
       }
-      // saveData 触发 alert + 跳回 list，dialog.js 已自动消化 alert
       return;
     }
 
@@ -142,8 +138,13 @@
   }
 
   async function onPageReady() {
-    await activateFromPending();
-    await runPipeline();
+    try {
+      await activateFromPending();
+      await runPipeline();
+    } catch (e) {
+      console.error('[BUPT评教]', e);
+      await notifyProgress({ phase: 'error', message: e.message || '运行出错' });
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -155,22 +156,25 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'START_EVAL') {
       (async () => {
-        await activateFromMessage(msg);
-        const type = pageType();
-        if (type === 'unknown') {
-          location.href = FIND_URL;
-          sendResponse({ ok: true, navigating: true });
-          return;
+        try {
+          await activateFromMessage(msg);
+          const type = pageType();
+          if (type === 'unknown') {
+            location.href = FIND_URL;
+            sendResponse({ ok: true, navigating: true });
+            return;
+          }
+          await runPipeline();
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
         }
-        await runPipeline();
-        sendResponse({ ok: true });
       })();
       return true;
     }
 
     if (msg.type === 'SUBMIT_ALL') {
-      const r = window.BuptEvalList.submitAll();
-      sendResponse(r);
+      sendResponse(window.BuptEvalList.submitAll());
       return true;
     }
 
@@ -184,8 +188,7 @@
 
     if (msg.type === 'STOP_EVAL') {
       (async () => {
-        await chrome.storage.session.remove(PENDING_KEY);
-        await setRunState(null);
+        await window.BuptEvalStore.remove([PENDING_KEY, RUN_KEY]);
         sendResponse({ ok: true });
       })();
       return true;

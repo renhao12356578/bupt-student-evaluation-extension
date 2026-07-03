@@ -100,7 +100,7 @@ async function startEval(autoSubmit) {
     const tab = await getActiveTab();
     if (!tab?.id) throw new Error('无法获取当前标签页');
 
-    // 清掉旧状态，写入新任务
+    // 清掉旧状态，写入新任务（popup 可直接用 storage）
     await chrome.storage.session.remove(['bupt_eval_run', 'eval_progress']);
     await chrome.storage.session.set({ pending_start: { autoSubmit, config } });
 
