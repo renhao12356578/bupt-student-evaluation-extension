@@ -12,8 +12,21 @@
 - **跨页续跑**：利用 `chrome.storage.session` 在 `find → list → edit → list` 跳转间自动继续
 - **可配置**：降级指标数、亮点、改进建议
 
-## 安装（开发者模式）
+## 安装
 
+### 从 GitHub Release 安装（推荐）
+
+> **不要直接安装 `.crx`**。Chrome 会报 `CRX_REQUIRED_PROOF_MISSING`，因为非 Chrome 网上应用店的 CRX 缺少 Google Publisher 签名，**拖拽/双击 CRX 在普通 Chrome 上已被禁止**。
+
+请下载 **`.zip`**：
+
+1. 打开 [Releases](https://github.com/renhao12356578/bupt-student-evaluation-extension/releases) → 下载 `bupt-student-evaluation-extension.zip`
+2. 解压到任意文件夹
+3. Chrome → `chrome://extensions/` → 开启 **开发者模式**
+4. **加载已解压的扩展程序** → 选择解压后的文件夹（内含 `manifest.json` 的那一层）
+5. 任意页面点扩展图标 → **一键评教**
+
+### 开发者模式（克隆仓库）
 1. 克隆本仓库
 2. 打开 Chrome → `chrome://extensions/`
 3. 开启右上角 **开发者模式**
@@ -22,7 +35,16 @@
 
 > 无需手动打开评教 URL，扩展会自动跳转到 `xspj_find.do` 并开始流程。
 
-## 打包分发
+### 关于 `.crx` 文件
+
+| 场景 | 能否用 CRX |
+|------|-----------|
+| 个人 Chrome，从 GitHub 下载 | ❌ 会报 `CRX_REQUIRED_PROOF_MISSING` |
+| 开发者模式加载 zip/文件夹 | ✅ 推荐 |
+| 企业策略（ExtensionInstallAllowlist + ExtensionInstallSources） | ✅ 可内网分发 CRX |
+| 上架 Chrome Web Store 后 | ✅ 用户可直接安装 |
+
+Release 里的 `.crx` 主要用于**固定扩展 ID 签名**与企业内网部署；个人用户请用 **zip**。
 
 扩展**不需要编译**，打包就是一个 **zip 压缩包**，且 **`manifest.json` 必须在 zip 根目录**：
 
@@ -48,7 +70,7 @@ npm install          # 首次：安装 crx3
 | 文件 | 说明 |
 |------|------|
 | `dist/bupt-student-evaluation-extension.zip` | 解压或开发者模式加载 |
-| `dist/bupt-student-evaluation-extension.crx` | 拖入 `chrome://extensions/` 安装 |
+| `dist/bupt-student-evaluation-extension.crx` | 企业内网分发 / 固定 ID 签名（个人 Chrome 勿直接安装） |
 | `dist/extension.pem` | CRX 签名私钥（首次自动生成，**请备份**以保持扩展 ID 不变） |
 
 **CI 固定扩展 ID**：在 GitHub 仓库 Settings → Secrets → `CRX_PRIVATE_KEY` 填入 `dist/extension.pem` 的完整内容。
@@ -70,7 +92,7 @@ git push origin v1.1.2
 |------|------|------|
 | **文件夹** | 项目根目录 | 开发调试，`chrome://extensions` → 加载已解压 |
 | **`.zip`** | `dist/*.zip` | 发同学、备份、上传 Chrome 网上应用店 |
-| **`.crx`** | Chrome 打包生成 | 旧式离线安装（现在较少用，商店/zip 更常见） |
+| **`.crx`** | `dist/*.crx` | 企业策略内网安装（个人用户请用 zip） |
 
 上架 [Chrome Web Store](https://chrome.google.com/webstore/devconsole) 时：上传 zip，填写说明，审核通过后用户可直接安装，**无需开发者模式**。
 
