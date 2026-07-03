@@ -123,8 +123,8 @@
 
     if (type === 'edit') {
       await notifyProgress({ phase: 'filling', message: '正在填充当前课程…' });
-      await sleep(1200);
-      const result = window.BuptEvalFill.fillAndSave(config);
+      await sleep(800);
+      const result = await window.BuptEvalFill.fillAndSave(config);
       if (!result.ok) {
         await setRunState(null);
         await notifyProgress({ phase: 'error', message: result.error || '填充失败' });
