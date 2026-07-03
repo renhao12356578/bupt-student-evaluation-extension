@@ -1,17 +1,17 @@
 /**
- * BUPT 评教 content script：跨页面续跑一键评教流程
+ * BUPT 评教 content script — 与 Playwright 成功流程对齐
+ * find → list → edit(填表+saveData) → list → … → 可选 submit
  */
 (function () {
   const STORAGE_KEY = 'bupt_eval_run';
-  const FIND_PATH = '/jsxsd/xspj/xspj_find.do';
-  const LIST_PATH = '/xspj_list.do';
-  const EDIT_PATH = '/xspj_edit.do';
+  const PENDING_KEY = 'pending_start';
+  const FIND_URL = 'https://jwgl.bupt.edu.cn/jsxsd/xspj/xspj_find.do';
 
   function pageType() {
     const href = location.href;
-    if (href.includes(EDIT_PATH)) return 'edit';
-    if (href.includes(LIST_PATH)) return 'list';
-    if (href.includes(FIND_PATH)) return 'find';
+    if (href.includes('/xspj_edit.do')) return 'edit';
+    if (href.includes('/xspj_list.do')) return 'list';
+    if (href.includes('/xspj_find.do')) return 'find';
     return 'unknown';
   }
 
@@ -29,19 +29,40 @@
     else await chrome.storage.session.remove(STORAGE_KEY);
   }
 
-  async function updateProgress(patch) {
-    const cur = (await getRunState()) || {};
-    await setRunState({ ...cur, ...patch, updatedAt: Date.now() });
-  }
-
-  async function notifyPopup(payload) {
+  async function notifyProgress(payload) {
+    const msg = { ...payload, ts: Date.now() };
+    await chrome.storage.session.set({ eval_progress: msg });
     try {
-      await chrome.runtime.sendMessage({ type: 'EVAL_PROGRESS', ...payload });
+      await chrome.runtime.sendMessage({ type: 'EVAL_PROGRESS', ...msg });
     } catch {
-      /* popup 可能已关闭 */
+      /* popup 可能已关 */
     }
   }
 
+  async function activateFromPending() {
+    const data = await chrome.storage.session.get(PENDING_KEY);
+    if (!data[PENDING_KEY]) return false;
+    await chrome.storage.session.remove(PENDING_KEY);
+    await setRunState({
+      active: true,
+      autoSubmit: !!data[PENDING_KEY].autoSubmit,
+      config: data[PENDING_KEY].config || window.BuptEvalFill.DEFAULT_CONFIG,
+      startedAt: Date.now(),
+    });
+    return true;
+  }
+
+  async function activateFromMessage(msg) {
+    await chrome.storage.session.remove(PENDING_KEY);
+    await setRunState({
+      active: true,
+      autoSubmit: !!msg.autoSubmit,
+      config: msg.config || window.BuptEvalFill.DEFAULT_CONFIG,
+      startedAt: Date.now(),
+    });
+  }
+
+  /** 与 Playwright runPipeline 一致 */
   async function runPipeline() {
     const state = await getRunState();
     if (!state?.active) return;
@@ -50,25 +71,27 @@
     const config = state.config || window.BuptEvalFill.DEFAULT_CONFIG;
 
     if (type === 'find') {
-      await notifyPopup({ phase: 'entering', message: '进入评教列表…' });
+      await notifyProgress({ phase: 'entering', message: '进入评教列表…' });
+      await sleep(500);
       if (window.BuptEvalList.enterFromFindPage()) return;
       await setRunState(null);
-      await notifyPopup({ phase: 'error', message: '未找到「进入评价」链接' });
+      await notifyProgress({ phase: 'error', message: '未找到「进入评价」链接，请确认评教已开放' });
       return;
     }
 
     if (type === 'list') {
+      await sleep(800);
       const status = window.BuptEvalList.getListStatus();
-      await updateProgress({
-        filled: status.evaluated,
-        total: status.total,
-        minScore: status.minScore,
-        maxScore: status.maxScore,
-      });
-      await notifyPopup({
+      await notifyProgress({
         phase: 'filling',
         message: `进度 ${status.evaluated}/${status.total}`,
-        status,
+        status: {
+          filled: status.evaluated,
+          total: status.total,
+          unevaluated: status.unevaluated,
+          minScore: status.minScore,
+          maxScore: status.maxScore,
+        },
       });
 
       if (status.unevaluated > 0) {
@@ -76,14 +99,13 @@
         return;
       }
 
-      // 全部保存完成
       if (state.autoSubmit) {
-        await notifyPopup({ phase: 'submitting', message: '正在提交…' });
+        await notifyProgress({ phase: 'submitting', message: '正在提交全部评教…' });
         await sleep(500);
         window.BuptEvalList.submitAll();
-        await updateProgress({ phase: 'submitted', active: false });
+        await sleep(2000);
         await setRunState(null);
-        await notifyPopup({
+        await notifyProgress({
           phase: 'done',
           message: `已完成并提交，分数 ${status.minScore}~${status.maxScore}`,
           status,
@@ -91,9 +113,8 @@
         return;
       }
 
-      await updateProgress({ phase: 'saved', active: false });
       await setRunState(null);
-      await notifyPopup({
+      await notifyProgress({
         phase: 'done',
         message: `已全部保存（未提交），分数 ${status.minScore}~${status.maxScore}`,
         status,
@@ -103,40 +124,28 @@
     }
 
     if (type === 'edit') {
-      await notifyPopup({ phase: 'filling', message: '正在填充当前课程…' });
-      await sleep(800);
+      await notifyProgress({ phase: 'filling', message: '正在填充当前课程…' });
+      await sleep(1200);
       const result = window.BuptEvalFill.fillAndSave(config);
       if (!result.ok) {
         await setRunState(null);
-        await notifyPopup({ phase: 'error', message: result.error || '填充失败' });
+        await notifyProgress({ phase: 'error', message: result.error || '填充失败' });
+        return;
       }
-      // saveData 会触发页面跳回 list，由 list 页继续
+      // saveData 触发 alert + 跳回 list，dialog.js 已自动消化 alert
       return;
     }
 
     await setRunState(null);
-    await notifyPopup({ phase: 'error', message: '请在教务评教页面使用' });
-  }
-
-  async function consumePendingStart() {
-    const data = await chrome.storage.session.get('pending_start');
-    if (!data.pending_start) return false;
-    await chrome.storage.session.remove('pending_start');
-    await setRunState({
-      active: true,
-      autoSubmit: !!data.pending_start.autoSubmit,
-      config: data.pending_start.config || window.BuptEvalFill.DEFAULT_CONFIG,
-      startedAt: Date.now(),
-    });
-    return true;
+    await notifyProgress({ phase: 'error', message: '不在评教页面，正在重新打开…' });
+    location.href = FIND_URL;
   }
 
   async function onPageReady() {
-    await consumePendingStart();
+    await activateFromPending();
     await runPipeline();
   }
 
-  // 页面加载后：处理「点击扩展后跳转过来」的待启动任务，或续跑进行中的评教
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => onPageReady());
   } else {
@@ -146,16 +155,10 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'START_EVAL') {
       (async () => {
-        await setRunState({
-          active: true,
-          autoSubmit: !!msg.autoSubmit,
-          config: msg.config || window.BuptEvalFill.DEFAULT_CONFIG,
-          startedAt: Date.now(),
-        });
-
+        await activateFromMessage(msg);
         const type = pageType();
         if (type === 'unknown') {
-          window.location.href = 'https://jwgl.bupt.edu.cn/jsxsd/xspj/xspj_find.do';
+          location.href = FIND_URL;
           sendResponse({ ok: true, navigating: true });
           return;
         }
@@ -180,7 +183,11 @@
     }
 
     if (msg.type === 'STOP_EVAL') {
-      setRunState(null).then(() => sendResponse({ ok: true }));
+      (async () => {
+        await chrome.storage.session.remove(PENDING_KEY);
+        await setRunState(null);
+        sendResponse({ ok: true });
+      })();
       return true;
     }
   });
